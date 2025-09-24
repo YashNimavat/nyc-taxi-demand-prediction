@@ -1,0 +1,80 @@
+data:
+  raw:
+    tlc_base_url: "https://d37ci6vzurychx.cloudfront.net/trip-data/"
+    zone_lookup_url: "https://d37ci6vzurychx.cloudfront.net/misc/taxi+_zone_lookup.csv"
+    years: [2024]
+    months: [1, 2, 3]
+  
+  processing:
+    h3_resolution: 8
+    time_window: "15T"  # 15 minutes
+    min_trips_per_window: 1
+    
+  spatial:
+    # NYC bounding box
+    lat_min: 40.4774
+    lat_max: 40.9176
+    lon_min: -74.2591  
+    lon_max: -73.7004
+    
+  temporal:
+    start_date: "2024-01-01"
+    end_date: "2024-03-31"
+    timezone: "US/Eastern"
+    
+  quality_filters:
+    trip_distance: [0.1, 50.0]  # miles
+    fare_amount: [2.5, 500.0]   # dollars
+    passenger_count: [1, 6]
+    duration_minutes: [1, 180]  # 1 min to 3 hours
+    
+  feature_engineering:
+    weather:
+      api_url: "https://api.open-meteo.com/v1/forecast"
+      location:
+        latitude: 40.7128
+        longitude: -74.0060
+      variables:
+        - temperature_2m
+        - precipitation
+        - windspeed_10m
+        - relativehumidity_2m
+        
+    temporal_features:
+      - hour
+      - day_of_week
+      - day_of_month
+      - day_of_year
+      - week_of_year
+      - month
+      - quarter
+      - is_weekend
+      - is_holiday
+      
+    aggregation_features:
+      lookback_windows: [3, 6, 12, 24]  # hours
+      statistics:
+        - mean
+        - std
+        - min
+        - max
+        - median
+        
+  validation:
+    holdout_percentage: 0.2
+    temporal_split: true
+    min_data_points: 1000
+    
+external_data:
+  weather:
+    enabled: true
+    cache_duration: "24h"
+    
+  events:
+    enabled: false
+    sources: []
+    
+  holidays:
+    enabled: true
+    country: "US"
+    state: "NY"

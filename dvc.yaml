@@ -1,0 +1,64 @@
+stages:
+  download_data:
+    cmd: python src/data/download_data.py
+    deps:
+      - src/data/download_data.py
+      - config/data_config.yaml
+    outs:
+      - data/raw/yellow_tripdata_2024-01.parquet
+      - data/raw/yellow_tripdata_2024-02.parquet  
+      - data/raw/yellow_tripdata_2024-03.parquet
+      - data/raw/taxi_zone_lookup.csv
+
+  preprocess_data:
+    cmd: python src/data/preprocess.py
+    deps:
+      - src/data/preprocess.py
+      - config/data_config.yaml
+      - data/raw/yellow_tripdata_2024-01.parquet
+      - data/raw/yellow_tripdata_2024-02.parquet
+      - data/raw/yellow_tripdata_2024-03.parquet
+      - data/raw/taxi_zone_lookup.csv
+    outs:
+      - data/processed/cleaned_trips.parquet
+    metrics:
+      - metrics/data_quality.json
+
+  feature_engineering:
+    cmd: python src/data/feature_engineering.py
+    deps:
+      - src/data/feature_engineering.py
+      - config/data_config.yaml
+      - data/processed/cleaned_trips.parquet
+    outs:
+      - data/processed/aggregated_h3_features.parquet
+      - data/processed/weather_data.parquet
+    metrics:
+      - metrics/feature_stats.json
+
+  train_model:
+    cmd: python src/models/train_model.py
+    deps:
+      - src/models/train_model.py
+      - config/model_config.yaml
+      - data/processed/aggregated_h3_features.parquet
+      - data/processed/weather_data.parquet
+    outs:
+      - models/xgboost_model.pkl
+    metrics:
+      - metrics/model_performance.json
+    plots:
+      - plots/feature_importance.json
+      - plots/residuals.json
+
+  evaluate_model:
+    cmd: python src/models/evaluate_model.py
+    deps:
+      - src/models/evaluate_model.py
+      - models/xgboost_model.pkl
+      - data/processed/aggregated_h3_features.parquet
+      - data/processed/weather_data.parquet
+    metrics:
+      - metrics/model_evaluation.json
+    plots:
+      - plots/prediction_analysis.json

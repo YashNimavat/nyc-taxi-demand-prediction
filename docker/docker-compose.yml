@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Main application
+  taxi-demand-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DAGSHUB_USER_TOKEN=${DAGSHUB_USER_TOKEN}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ../data:/app/data:ro
+      - ../models:/app/models:ro
+    depends_on:
+      - redis
+    networks:
+      - taxi-network
+
+  # Redis for feature store
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - taxi-network
+
+  # MLflow tracking server
+  mlflow:
+    image: python:3.12-slim
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../mlruns:/app/mlruns
+    command: |
+      bash -c "
+        pip install mlflow[extras]==2.8.0 &&
+        mlflow server \
+          --backend-store-uri sqlite:////app/mlruns/mlflow.db \
+          --default-artifact-root /app/mlruns \
+          --host 0.0.0.0 \
+          --port 5000
+      "
+    networks:
+      - taxi-network
+
+  # Jupyter notebook server
+  jupyter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8888:8888"
+    environment:
+      - DAGSHUB_USER_TOKEN=${DAGSHUB_USER_TOKEN}
+    volumes:
+      - ../notebooks:/app/notebooks
+      - ../data:/app/data
+      - ../models:/app/models
+    command: |
+      bash -c "
+        pip install jupyter &&
+        jupyter notebook \
+          --ip=0.0.0.0 \
+          --port=8888 \
+          --no-browser \
+          --allow-root \
+          --NotebookApp.token='' \
+          --NotebookApp.password=''
+      "
+    networks:
+      - taxi-network
+
+volumes:
+  redis-data:
+
+networks:
+  taxi-network:
+    driver: bridge
