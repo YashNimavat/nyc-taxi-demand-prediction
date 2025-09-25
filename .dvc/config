@@ -1,2 +1,4 @@
 [core]
-    no_scm = True
+    remote = origin
+['remote "origin"']
+    url = https://dagshub.com/YashNimavat/nyc-taxi-demand-prediction.dvc
