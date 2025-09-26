@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Data Preprocessing Script
-Cleans and filters NYC taxi data for feature engineering
+FIXED Data Preprocessing Script - Based on Your Actual NYC TLC Data Schema
+Works with 2024 TLC data that uses PULocationID/DOLocationID instead of lat/lon
 """
 
 import pandas as pd
@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class TaxiDataPreprocessor:
-    """Preprocesses NYC taxi trip data"""
+    """Preprocesses NYC taxi trip data - FIXED for 2024 TLC schema"""
     
     def __init__(self, config_path: str = "config/data_config.yaml"):
         """Initialize preprocessor with configuration"""
@@ -31,6 +31,56 @@ class TaxiDataPreprocessor:
             
         self.h3_resolution = self.config['data']['processing']['h3_resolution']
         self.quality_filters = self.config['data']['quality_filters']
+        
+        # Zone coordinates mapping (from your notebook)
+        self.zone_coords = {
+            4: (40.7505, -73.9934),   # Times Square
+            13: (40.7614, -73.9776),  # Lincoln Square
+            24: (40.7589, -73.9851),  # Union Square
+            68: (40.7505, -73.9934),  # Penn Station
+            79: (40.7831, -73.9712),  # East Harlem
+            87: (40.7282, -74.0776),  # Financial District
+            90: (40.7505, -73.9934),  # Flatiron
+            107: (40.7505, -73.9934), # Midtown East
+            113: (40.7505, -73.9934), # Midtown West
+            125: (40.7831, -73.9712), # Morningside Heights
+            140: (40.7282, -74.0776), # Lower East Side
+            141: (40.7282, -74.0776), # SoHo
+            142: (40.7505, -73.9934), # Greenwich Village
+            143: (40.7505, -73.9934), # West Village
+            144: (40.7505, -73.9934), # Chelsea
+            151: (40.7282, -74.0776), # Tribeca
+            152: (40.7505, -73.9934), # Theater District
+            158: (40.7831, -73.9712), # Washington Heights
+            161: (40.7505, -73.9934), # Midtown South
+            162: (40.7505, -73.9934), # Garment District
+            163: (40.7505, -73.9934), # Koreatown
+            164: (40.7505, -73.9934), # Herald Square
+            170: (40.7831, -73.9712), # Upper West Side
+            186: (40.7505, -73.9934), # Gramercy
+            230: (40.7505, -73.9934), # Upper East Side
+            231: (40.7505, -73.9934), # Yorkville
+            232: (40.7831, -73.9712), # Central Park
+            233: (40.7282, -74.0776), # Brooklyn Heights
+            234: (40.7831, -73.9712), # Inwood
+            236: (40.7831, -73.9712), # Washington Heights North
+            237: (40.7831, -73.9712), # Hamilton Heights
+            238: (40.7831, -73.9712), # Manhattanville
+            239: (40.7831, -73.9712), # Central Harlem
+            261: (40.7282, -74.0776), # World Trade Center
+            262: (40.7505, -73.9934), # Battery Park
+            263: (40.7505, -73.9934), # Civic Center
+            # Airports
+            1: (40.6413, -73.7781),   # Newark Airport
+            138: (40.7769, -73.8740), # LaGuardia Airport
+            132: (40.6413, -73.7781), # JFK Airport
+            # Outer areas
+            7: (40.7282, -73.7949),   # Long Island City
+            74: (40.7614, -73.8337),  # East Elmhurst
+            18: (40.8176, -73.8648),  # Bronx
+            46: (40.8448, -73.9648),  # University Heights
+        }
+        self.manhattan_center = (40.7589, -73.9851)
         
     def load_raw_data(self) -> pd.DataFrame:
         """Load all raw trip data files"""
@@ -57,7 +107,7 @@ class TaxiDataPreprocessor:
         return zones_df
     
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply data quality filters"""
+        """Apply data quality filters - FIXED for 2024 schema"""
         initial_count = len(df)
         logger.info(f"🧹 Cleaning {initial_count:,} trips...")
         
@@ -89,17 +139,8 @@ class TaxiDataPreprocessor:
             (df['duration_minutes'] <= self.quality_filters['duration_minutes'][1])
         ]
         
-        # Remove invalid coordinates
-        spatial_config = self.config['data']['spatial']
-        df = df[
-            (df['pickup_latitude'] >= spatial_config['lat_min']) &
-            (df['pickup_latitude'] <= spatial_config['lat_max']) &
-            (df['pickup_longitude'] >= spatial_config['lon_min']) &
-            (df['pickup_longitude'] <= spatial_config['lon_max'])
-        ]
-        
-        # Remove nulls in critical columns
-        critical_columns = ['pickup_latitude', 'pickup_longitude', 'fare_amount', 'trip_distance']
+        # Remove nulls in critical columns (using the correct column names for 2024 data)
+        critical_columns = ['PULocationID', 'DOLocationID', 'fare_amount', 'trip_distance']
         df = df.dropna(subset=critical_columns)
         
         final_count = len(df)
@@ -110,20 +151,22 @@ class TaxiDataPreprocessor:
         
         return df
     
+    def zone_to_h3(self, zone_id) -> str:
+        """Convert PULocationID to H3 cell via approximate centroid"""
+        try:
+            z_id = int(zone_id)
+        except:
+            return None
+        
+        lat, lon = self.zone_coords.get(z_id, self.manhattan_center)
+        return h3.geo_to_h3(lat, lon, self.h3_resolution)
+    
     def add_h3_cells(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add H3 hexagon cell identifiers"""
+        """Add H3 hexagon cell identifiers - FIXED for PULocationID"""
         logger.info("🗺️ Adding H3 spatial indexing...")
         
-        def lat_lon_to_h3(lat, lon):
-            try:
-                return h3.geo_to_h3(lat, lon, self.h3_resolution)
-            except:
-                return None
-        
-        df['pickup_h3'] = df.apply(
-            lambda row: lat_lon_to_h3(row['pickup_latitude'], row['pickup_longitude']), 
-            axis=1
-        )
+        # Convert PULocationID to H3 cells (not lat/lon coordinates)
+        df['pickup_h3'] = df['PULocationID'].apply(self.zone_to_h3)
         
         # Remove rows where H3 conversion failed
         initial_count = len(df)
@@ -157,6 +200,7 @@ class TaxiDataPreprocessor:
             'cleaned_rows': len(cleaned_df),
             'removal_rate': ((len(original_df) - len(cleaned_df)) / len(original_df)) * 100,
             'unique_h3_cells': int(cleaned_df['pickup_h3'].nunique()),
+            'unique_zones': int(cleaned_df['PULocationID'].nunique()),
             'date_range': {
                 'start': cleaned_df['pickup_datetime'].min().isoformat(),
                 'end': cleaned_df['pickup_datetime'].max().isoformat()
@@ -167,9 +211,15 @@ class TaxiDataPreprocessor:
                 'avg_duration_minutes': float(cleaned_df['duration_minutes'].mean())
             },
             'quality_checks': {
-                'null_coordinates': int((cleaned_df[['pickup_latitude', 'pickup_longitude']].isnull()).sum().sum()),
+                'null_location_ids': int((cleaned_df[['PULocationID', 'DOLocationID']].isnull()).sum().sum()),
                 'invalid_fares': int((cleaned_df['fare_amount'] <= 0).sum()),
                 'zero_distance_trips': int((cleaned_df['trip_distance'] <= 0).sum())
+            },
+            'schema_info': {
+                'data_source': '2024_TLC_parquet_format',
+                'uses_location_ids': True,
+                'uses_coordinates': False,
+                'total_columns': len(cleaned_df.columns)
             }
         }
         
@@ -186,7 +236,7 @@ class TaxiDataPreprocessor:
         # Clean data
         cleaned_df = self.clean_data(raw_df)
         
-        # Add spatial features
+        # Add spatial features (H3 from LocationIDs)
         cleaned_df = self.add_h3_cells(cleaned_df)
         
         # Add temporal features
@@ -209,6 +259,7 @@ class TaxiDataPreprocessor:
         logger.info(f"✅ Preprocessing complete!")
         logger.info(f"💾 Saved {len(cleaned_df):,} cleaned trips to {output_path}")
         logger.info(f"📊 Quality metrics saved to {metrics_path}")
+        logger.info(f"🗺️ Schema: Uses PULocationID -> H3 mapping (2024 TLC format)")
         
         return quality_metrics
 

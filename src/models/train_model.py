@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Model Training Script with MLflow Integration
-Trains XGBoost model for taxi demand prediction
+SIMPLIFIED Model Training Script - FIXED DagsHub MLflow issues
 """
 
 import os
@@ -9,8 +8,6 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import mlflow
-import mlflow.xgboost
-import dagshub
 import yaml
 import json
 import pickle
@@ -27,23 +24,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class TaxiDemandTrainer:
-    """Trains taxi demand prediction models"""
+    """Trains taxi demand prediction models - SIMPLIFIED VERSION"""
     
     def __init__(self, config_path: str = "config/model_config.yaml"):
         """Initialize trainer with configuration"""
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
-        # Initialize DagsHub MLflow integration
-        try:
-            dagshub.init(repo_owner='YOUR_USERNAME', repo_name='nyc-taxi-demand-prediction', mlflow=True)
-            mlflow.set_tracking_uri(self.config['mlflow']['tracking_uri'])
-            logger.info("✅ DagsHub MLflow integration initialized")
-        except Exception as e:
-            logger.warning(f"⚠️ DagsHub initialization failed: {e}")
-            mlflow.set_tracking_uri("file:./mlruns")
+        # SIMPLIFIED: Only use local MLflow to avoid DagsHub API issues
+        mlflow.set_tracking_uri("file:./mlruns")
+        logger.info("✅ Using local MLflow tracking")
             
-    def load_data(self) -> tuple:
+    def load_data(self) -> pd.DataFrame:
         """Load processed feature data"""
         logger.info("📥 Loading processed data...")
         
@@ -58,17 +50,22 @@ class TaxiDemandTrainer:
         # Merge datasets
         merged_df = features_df.merge(weather_df, on='time_window', how='left')
         
-        # Fill missing weather data with defaults
-        weather_columns = ['temperature_f', 'precipitation', 'wind_speed', 'humidity', 
-                          'is_raining', 'is_cold', 'is_hot']
-        for col in weather_columns:
+        # Fill missing weather data with proper defaults
+        weather_columns = {
+            'temperature_f': 60.0,
+            'precipitation_inches': 0.0,
+            'wind_speed_mph': 5.0,
+            'weather_code': 0,
+            'is_raining': 0,
+            'is_cold': 0,
+            'weather_demand_multiplier': 1.0
+        }
+        
+        for col, default_val in weather_columns.items():
             if col in merged_df.columns:
-                if col == 'temperature_f':
-                    merged_df[col] = merged_df[col].fillna(60.0)  # Default NYC temp
-                elif col in ['is_raining', 'is_cold', 'is_hot']:
-                    merged_df[col] = merged_df[col].fillna(0)
-                else:
-                    merged_df[col] = merged_df[col].fillna(merged_df[col].mean())
+                merged_df[col] = merged_df[col].fillna(default_val)
+            else:
+                merged_df[col] = default_val
         
         logger.info(f"✅ Loaded {len(merged_df):,} feature records")
         return merged_df
@@ -77,50 +74,41 @@ class TaxiDemandTrainer:
         """Prepare features and target for training"""
         logger.info("🔧 Preparing features...")
         
-        # Get feature columns from config
-        feature_columns = self.config['model']['features']
+        # Feature columns that exist in your data
+        feature_columns = [
+            'ema3', 'trip_prev', 'demand_trend', 'hour', 'weekday', 
+            'temperature_f', 'is_raining', 'is_cold', 'is_weekend', 
+            'avg_dist', 'avg_fare', 'is_rush_hour'
+        ]
         
-        # Ensure all required features exist
-        missing_features = [col for col in feature_columns if col not in df.columns]
-        if missing_features:
-            logger.warning(f"⚠️ Missing features: {missing_features}")
-            # Remove missing features from config
-            feature_columns = [col for col in feature_columns if col in df.columns]
+        # Add weekday as alias for day_of_week if needed
+        if 'weekday' not in df.columns and 'day_of_week' in df.columns:
+            df['weekday'] = df['day_of_week']
         
-        # Add any missing features with defaults
-        for col in missing_features:
-            if col == 'event_impact':
-                df[col] = 1.0  # Default event impact
-            elif col in ['is_raining', 'is_cold']:
-                df[col] = 0
-            elif col == 'temperature_f':
-                df[col] = 60.0
-            elif col in ['ema3', 'trip_prev', 'demand_trend']:
-                df[col] = df.groupby('pickup_h3')['trip_count'].transform('mean')
-            else:
-                df[col] = 0
+        # Add is_rush_hour if missing
+        if 'is_rush_hour' not in df.columns:
+            df['is_rush_hour'] = ((df['hour'].isin([7, 8, 9, 17, 18, 19]))).astype(int)
+        
+        # Filter to only include features that exist
+        available_features = [col for col in feature_columns if col in df.columns]
         
         # Prepare features and target
-        X = df[feature_columns].copy()
+        X = df[available_features].copy()
         y = df['trip_count'].copy()
         
-        # Handle any remaining missing values
+        # Handle missing values
         X = X.fillna(0)
         
-        logger.info(f"✅ Prepared {len(feature_columns)} features for {len(X)} samples")
-        return X, y, feature_columns
+        logger.info(f"✅ Prepared {len(available_features)} features for {len(X)} samples")
+        return X, y, available_features
     
     def train_model(self, X_train, y_train, X_val, y_val) -> xgb.XGBRegressor:
         """Train XGBoost model"""
         logger.info("🎯 Training XGBoost model...")
         
-        # Model parameters from config
         params = self.config['model']['parameters']
-        
-        # Create and train model
         model = xgb.XGBRegressor(**params)
         
-        # Fit model with validation set for early stopping
         model.fit(
             X_train, y_train,
             eval_set=[(X_val, y_val)],
@@ -135,20 +123,18 @@ class TaxiDemandTrainer:
         """Evaluate model performance"""
         logger.info("📊 Evaluating model performance...")
         
-        # Make predictions
         y_pred_train = model.predict(X_train)
         y_pred_test = model.predict(X_test)
         
-        # Calculate metrics
         metrics = {
-            'train_mae': mean_absolute_error(y_train, y_pred_train),
-            'test_mae': mean_absolute_error(y_test, y_pred_test),
-            'train_rmse': np.sqrt(mean_squared_error(y_train, y_pred_train)),
-            'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred_test)),
-            'train_mape': mean_absolute_percentage_error(y_train, y_pred_train),
-            'test_mape': mean_absolute_percentage_error(y_test, y_pred_test),
-            'train_r2': r2_score(y_train, y_pred_train),
-            'test_r2': r2_score(y_test, y_pred_test)
+            'train_mae': float(mean_absolute_error(y_train, y_pred_train)),
+            'test_mae': float(mean_absolute_error(y_test, y_pred_test)),
+            'train_rmse': float(np.sqrt(mean_squared_error(y_train, y_pred_train))),
+            'test_rmse': float(np.sqrt(mean_squared_error(y_test, y_pred_test))),
+            'train_mape': float(mean_absolute_percentage_error(y_train, y_pred_train)),
+            'test_mape': float(mean_absolute_percentage_error(y_test, y_pred_test)),
+            'train_r2': float(r2_score(y_train, y_pred_train)),
+            'test_r2': float(r2_score(y_test, y_pred_test))
         }
         
         logger.info(f"✅ Model evaluation completed - Test MAE: {metrics['test_mae']:.3f}")
@@ -158,7 +144,6 @@ class TaxiDemandTrainer:
         """Save model artifacts"""
         logger.info("💾 Saving model artifacts...")
         
-        # Create models directory
         models_dir = Path("models")
         models_dir.mkdir(exist_ok=True)
         
@@ -167,7 +152,7 @@ class TaxiDemandTrainer:
         with open(model_path, 'wb') as f:
             pickle.dump(model, f)
         
-        # Save model metadata
+        # Save metadata
         metadata = {
             'model_type': 'xgboost',
             'features': feature_columns,
@@ -177,28 +162,26 @@ class TaxiDemandTrainer:
             'parameters': self.config['model']['parameters']
         }
         
-        metadata_path = models_dir / "model_metadata.json"
-        with open(metadata_path, 'w') as f:
+        with open(models_dir / "model_metadata.json", 'w') as f:
             json.dump(metadata, f, indent=2)
         
-        # Save feature importance
-        importance_dict = dict(zip(feature_columns, model.feature_importances_))
+        # Save feature importance (FIXED: Convert numpy types)
+        importance_dict = {
+            feature: float(importance) 
+            for feature, importance in zip(feature_columns, model.feature_importances_)
+        }
         
-        # Create plots directory
         plots_dir = Path("plots")
         plots_dir.mkdir(exist_ok=True)
         
-        # Save feature importance plot data
-        importance_path = plots_dir / "feature_importance.json"
-        with open(importance_path, 'w') as f:
+        with open(plots_dir / "feature_importance.json", 'w') as f:
             json.dump(importance_dict, f, indent=2)
         
-        # Save metrics for DVC
+        # Save metrics
         metrics_dir = Path("metrics")
         metrics_dir.mkdir(exist_ok=True)
         
-        performance_path = metrics_dir / "model_performance.json"
-        with open(performance_path, 'w') as f:
+        with open(metrics_dir / "model_performance.json", 'w') as f:
             json.dump(metrics, f, indent=2)
         
         logger.info(f"✅ Model artifacts saved to {models_dir}")
@@ -208,11 +191,10 @@ class TaxiDemandTrainer:
         """Run the complete training pipeline"""
         logger.info("🚀 Starting model training pipeline...")
         
-        # Set MLflow experiment
-        experiment_name = self.config['mlflow']['experiment_name']
+        experiment_name = self.config.get('mlflow', {}).get('experiment_name', 'taxi-demand-prediction')
         mlflow.set_experiment(experiment_name)
         
-        with mlflow.start_run(run_name=f"{self.config['mlflow']['run_name_prefix']}{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}") as run:
+        with mlflow.start_run(run_name=f"xgboost-v{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}") as run:
             
             # Load data
             df = self.load_data()
@@ -221,27 +203,21 @@ class TaxiDemandTrainer:
             X, y, feature_columns = self.prepare_features(df)
             
             # Train/validation/test split
+            test_size = self.config.get('training', {}).get('test_size', 0.2)
+            val_size = self.config.get('training', {}).get('validation_size', 0.1)
+            random_state = self.config.get('training', {}).get('random_state', 42)
+            
             X_temp, X_test, y_temp, y_test = train_test_split(
-                X, y, 
-                test_size=self.config['training']['test_size'],
-                random_state=self.config['training']['random_state']
+                X, y, test_size=test_size, random_state=random_state
             )
             
             X_train, X_val, y_train, y_val = train_test_split(
-                X_temp, y_temp,
-                test_size=self.config['training']['validation_size']/(1-self.config['training']['test_size']),
-                random_state=self.config['training']['random_state']
+                X_temp, y_temp, test_size=val_size/(1-test_size), random_state=random_state
             )
             
-            # Log dataset information
+            # Log parameters
             mlflow.log_param("dataset_size", len(df))
             mlflow.log_param("feature_count", len(feature_columns))
-            mlflow.log_param("train_size", len(X_train))
-            mlflow.log_param("val_size", len(X_val))
-            mlflow.log_param("test_size", len(X_test))
-            mlflow.log_param("features", feature_columns)
-            
-            # Log model parameters
             mlflow.log_params(self.config['model']['parameters'])
             
             # Train model
@@ -250,28 +226,17 @@ class TaxiDemandTrainer:
             # Evaluate model
             metrics = self.evaluate_model(model, X_test, y_test, X_train, y_train)
             
-            # Log metrics to MLflow
+            # Log metrics
             mlflow.log_metrics(metrics)
             
-            # Log model to MLflow
-            mlflow.xgboost.log_model(
-                model, 
-                "xgboost_model",
-                registered_model_name=self.config.get('model_registry', {}).get('model_name', 'taxi-demand-xgboost')
-            )
+            # SIMPLIFIED: Just log the model without registry (avoids DagsHub API issues)
+            mlflow.sklearn.log_model(model, "xgboost_model")
             
             # Save local artifacts
             model_path = self.save_model_artifacts(model, feature_columns, metrics)
             
-            # Log artifacts
-            mlflow.log_artifacts("models", "models")
-            mlflow.log_artifacts("plots", "plots")
-            mlflow.log_artifacts("metrics", "metrics")
-            
             logger.info(f"✅ Training pipeline completed!")
             logger.info(f"📊 Test MAE: {metrics['test_mae']:.3f}")
-            logger.info(f"📊 Test RMSE: {metrics['test_rmse']:.3f}")
-            logger.info(f"📊 Test MAPE: {metrics['test_mape']:.3f}")
             logger.info(f"🔗 MLflow Run ID: {run.info.run_id}")
             
             return {

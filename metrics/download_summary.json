@@ -1,0 +1,31 @@
+{
+  "files_downloaded": 4,
+  "files_valid": 4,
+  "total_size_mb": 180.7,
+  "files": {
+    "data\\raw\\yellow_tripdata_2025-01.parquet": {
+      "rows": 3475226,
+      "columns": 20,
+      "size_mb": 56.41769218444824,
+      "status": "valid"
+    },
+    "data\\raw\\yellow_tripdata_2025-02.parquet": {
+      "rows": 3577543,
+      "columns": 20,
+      "size_mb": 57.547651290893555,
+      "status": "valid"
+    },
+    "data\\raw\\yellow_tripdata_2025-03.parquet": {
+      "rows": 4145257,
+      "columns": 20,
+      "size_mb": 66.7235803604126,
+      "status": "valid"
+    },
+    "data\\raw\\taxi_zone_lookup.csv": {
+      "rows": 265,
+      "columns": 4,
+      "size_mb": 0.011759757995605469,
+      "status": "valid"
+    }
+  }
+}

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-NYC TLC Data Download Script
-Downloads NYC Yellow Taxi trip data and zone lookup files
+FIXED Data Download Script - Checks for existing files to avoid re-downloading
 """
 
 import os
@@ -22,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class TLCDataDownloader:
-    """Downloads NYC TLC taxi data"""
+    """Downloads NYC TLC taxi data - FIXED to avoid re-downloading"""
     
     def __init__(self, config_path: str = "config/data_config.yaml"):
         """Initialize downloader with configuration"""
@@ -33,7 +32,7 @@ class TLCDataDownloader:
         self.raw_data_dir.mkdir(parents=True, exist_ok=True)
         
     def download_tlc_data(self) -> List[str]:
-        """Download NYC TLC data for specified years and months"""
+        """Download NYC TLC data for specified years and months - SKIP if exists"""
         downloaded_files = []
         
         base_url = self.config['data']['raw']['tlc_base_url']
@@ -47,10 +46,17 @@ class TLCDataDownloader:
                 url = f'{base_url}{filename}'
                 filepath = self.raw_data_dir / filename
                 
+                # FIXED: Check if file already exists and is valid
                 if filepath.exists():
-                    logger.info(f"✅ File already exists: {filepath}")
-                    downloaded_files.append(str(filepath))
-                    continue
+                    try:
+                        # Verify file is valid by reading it
+                        df = pd.read_parquet(filepath)
+                        logger.info(f"✅ File already exists and valid: {filepath} ({len(df):,} records)")
+                        downloaded_files.append(str(filepath))
+                        continue
+                    except Exception as e:
+                        logger.warning(f"⚠️ Existing file corrupted, re-downloading: {filepath}")
+                        filepath.unlink()  # Delete corrupted file
                 
                 try:
                     logger.info(f"⬇️ Downloading {filename}...")
@@ -69,13 +75,20 @@ class TLCDataDownloader:
         return downloaded_files
     
     def download_zone_lookup(self) -> str:
-        """Download taxi zone lookup table"""
+        """Download taxi zone lookup table - SKIP if exists"""
         url = self.config['data']['raw']['zone_lookup_url']
         filepath = self.raw_data_dir / 'taxi_zone_lookup.csv'
         
+        # FIXED: Check if file already exists and is valid
         if filepath.exists():
-            logger.info(f"✅ Zone lookup already exists: {filepath}")
-            return str(filepath)
+            try:
+                # Verify file is valid by reading it
+                df = pd.read_csv(filepath)
+                logger.info(f"✅ Zone lookup already exists and valid: {filepath} ({len(df)} zones)")
+                return str(filepath)
+            except Exception as e:
+                logger.warning(f"⚠️ Existing zone lookup corrupted, re-downloading")
+                filepath.unlink()  # Delete corrupted file
         
         try:
             logger.info("⬇️ Downloading taxi zone lookup...")
@@ -154,7 +167,7 @@ class TLCDataDownloader:
         }
         
         logger.info(f"✅ Download complete!")
-        logger.info(f"📊 Downloaded {len(valid_files)} valid files ({total_size_mb:.1f} MB)")
+        logger.info(f"📊 Have {len(valid_files)} valid files ({total_size_mb:.1f} MB)")
         
         return summary
 

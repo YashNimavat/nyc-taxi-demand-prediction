@@ -1,0 +1,26 @@
+development_workflow:
+  branching_strategy: feature_branches
+  ci_cd: github_actions
+  code_review: required
+  data_validation: dvc_pipeline
+  model_validation: mlflow_tracking
+project:
+  description: Real-time taxi demand prediction using H3 spatial indexing and XGBoost
+  name: NYC Taxi Demand Prediction
+  repository: https://dagshub.com/YashNimavat/nyc-taxi-demand-prediction
+  version: 1.0.0
+team:
+  permissions:
+    data_access: all_team_members
+    experiment_tracking: data_scientists_ml_engineers
+    model_deployment: ml_engineers_maintainers
+    repository_admin: maintainers
+  roles:
+    data_engineers:
+    - Responsible for data pipelines and feature engineering
+    data_scientists:
+    - Model development and experimentation
+    maintainers:
+    - Project oversight and permissions
+    ml_engineers:
+    - Production deployment and monitoring

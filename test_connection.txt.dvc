@@ -1,0 +1,5 @@
+outs:
+- md5: 1170ff4486d25fe2b904825efdaed9e9
+  size: 27
+  hash: md5
+  path: test_connection.txt

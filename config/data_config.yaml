@@ -1,0 +1,28 @@
+data:
+  raw:
+    tlc_base_url: "https://d37ci6vzurychx.cloudfront.net/trip-data/"
+    zone_lookup_url: "https://d37ci6vzurychx.cloudfront.net/misc/taxi+_zone_lookup.csv"
+    years: [2025]  # Changed to 2025 to match what's downloading
+    months: [1, 2, 3]
+  
+  processing:
+    h3_resolution: 8
+    time_window: "15T"
+    
+  quality_filters:
+    trip_distance: [0.1, 50.0]
+    fare_amount: [2.0, 500.0]
+    passenger_count: [1, 6]
+    duration_minutes: [1, 180]
+    
+  feature_engineering:
+    weather:
+      api_url: "https://archive-api.open-meteo.com/v1/archive"
+      location:
+        latitude: 40.7589
+        longitude: -73.9851
+      variables:
+        - "temperature_2m"
+        - "precipitation" 
+        - "windspeed_10m"
+        - "weathercode"

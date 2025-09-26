@@ -1,0 +1,130 @@
+schema: '2.0'
+stages:
+  download_data:
+    cmd: python src/data/download_data.py
+    deps:
+    - path: config/data_config.yaml
+      hash: md5
+      md5: 1716ff73e8e2005137cf693532edd8a8
+      size: 756
+    - path: src/data/download_data.py
+      hash: md5
+      md5: fb50c65846496fe4a6fb6cb4a1cd8068
+      size: 7160
+    outs:
+    - path: data/raw/taxi_zone_lookup.csv
+      hash: md5
+      md5: c6064b7c144c716450641f769659d178
+      size: 12331
+    - path: data/raw/yellow_tripdata_2025-01.parquet
+      hash: md5
+      md5: c403f3bc3a64a1405e1a39817bc7e414
+      size: 59158238
+    - path: data/raw/yellow_tripdata_2025-02.parquet
+      hash: md5
+      md5: 0f61bd9b136ad698c6d9094db2fa75e0
+      size: 60343086
+    - path: data/raw/yellow_tripdata_2025-03.parquet
+      hash: md5
+      md5: 70f84a035ad186f8d9d50c26015b0d48
+      size: 69964745
+  preprocess_data:
+    cmd: python src/data/preprocess.py --config config/data_config.yaml
+    deps:
+    - path: config/data_config.yaml
+      hash: md5
+      md5: 1716ff73e8e2005137cf693532edd8a8
+      size: 756
+    - path: data/raw/taxi_zone_lookup.csv
+      hash: md5
+      md5: c6064b7c144c716450641f769659d178
+      size: 12331
+    - path: data/raw/yellow_tripdata_2025-01.parquet
+      hash: md5
+      md5: c403f3bc3a64a1405e1a39817bc7e414
+      size: 59158238
+    - path: data/raw/yellow_tripdata_2025-02.parquet
+      hash: md5
+      md5: 0f61bd9b136ad698c6d9094db2fa75e0
+      size: 60343086
+    - path: data/raw/yellow_tripdata_2025-03.parquet
+      hash: md5
+      md5: 70f84a035ad186f8d9d50c26015b0d48
+      size: 69964745
+    - path: src/data/preprocess.py
+      hash: md5
+      md5: 025668380e58fa207cdcc393734b17f8
+      size: 11773
+    outs:
+    - path: data/processed/cleaned_trips.parquet
+      hash: md5
+      md5: 540e3abba18410e746164a6eb088009a
+      size: 283323499
+    - path: metrics/data_quality.json
+      hash: md5
+      md5: d78f340f0eabb79400e303ae452acd81
+      size: 682
+  feature_engineering:
+    cmd: python src/data/feature_engineering.py --config config/data_config.yaml
+    deps:
+    - path: config/data_config.yaml
+      hash: md5
+      md5: 1716ff73e8e2005137cf693532edd8a8
+      size: 756
+    - path: data/processed/cleaned_trips.parquet
+      hash: md5
+      md5: 540e3abba18410e746164a6eb088009a
+      size: 283323499
+    - path: src/data/feature_engineering.py
+      hash: md5
+      md5: 195b71757ee06f8f94660ba4a5cd7702
+      size: 15976
+    outs:
+    - path: data/processed/aggregated_h3_features.parquet
+      hash: md5
+      md5: 6949b9f0cc8d561678710f9b362f453c
+      size: 5195249
+    - path: data/processed/weather_data.parquet
+      hash: md5
+      md5: ac923a64dafbe9a827edb426dd3b9ac5
+      size: 1880034
+    - path: metrics/feature_stats.json
+      hash: md5
+      md5: a18aa8040257ea1d217dea762f7574bf
+      size: 9161
+  train_model:
+    cmd: python src/models/train_model.py --config config/model_config.yaml
+    deps:
+    - path: config/model_config.yaml
+      hash: md5
+      md5: 9661673697d93b3120fe07529b428c2f
+      size: 1272
+    - path: data/processed/aggregated_h3_features.parquet
+      hash: md5
+      md5: 6949b9f0cc8d561678710f9b362f453c
+      size: 5195249
+    - path: data/processed/weather_data.parquet
+      hash: md5
+      md5: ac923a64dafbe9a827edb426dd3b9ac5
+      size: 1880034
+    - path: src/models/train_model.py
+      hash: md5
+      md5: 4040973679c4131a8f8a2df7eced7b98
+      size: 10043
+    outs:
+    - path: metrics/model_performance.json
+      hash: md5
+      md5: 3320cbd5a765ff1e608a34784f81cf4d
+      size: 288
+    - path: models/model_metadata.json
+      hash: md5
+      md5: b4d67d2f8019117057e6e10c05777457
+      size: 856
+    - path: models/xgboost_model.pkl
+      hash: md5
+      md5: b9d29180cc3bcd0881ec43d32575dae5
+      size: 444858
+    - path: plots/feature_importance.json
+      hash: md5
+      md5: cb93b5bcf5da0bf89e52c228990da40e
+      size: 411

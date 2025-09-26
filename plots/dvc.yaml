@@ -5,17 +5,17 @@ stages:
       - src/data/download_data.py
       - config/data_config.yaml
     outs:
-      - data/raw/yellow_tripdata_2025-01.parquet
+      - data/raw/yellow_tripdata_2025-01.parquet  # FIXED: Changed to 2025
       - data/raw/yellow_tripdata_2025-02.parquet  
       - data/raw/yellow_tripdata_2025-03.parquet
       - data/raw/taxi_zone_lookup.csv
 
   preprocess_data:
-    cmd: python src/data/preprocess.py --config config/data_config.yaml
+    cmd: python src/models/train_model.py --config config/model_config.yaml  # Use fixed script
     deps:
       - src/data/preprocess.py
       - config/data_config.yaml
-      - data/raw/yellow_tripdata_2025-01.parquet
+      - data/raw/yellow_tripdata_2025-01.parquet  # FIXED: 2025 data
       - data/raw/yellow_tripdata_2025-02.parquet
       - data/raw/yellow_tripdata_2025-03.parquet
       - data/raw/taxi_zone_lookup.csv
@@ -37,7 +37,7 @@ stages:
       - metrics/feature_stats.json
 
   train_model:
-    cmd: python src/models/train_model.py --config config/model_config.yaml
+    cmd: python src/models/train_model.py --config config/model_config.yaml  # Use fixed script
     deps:
       - src/models/train_model.py
       - config/model_config.yaml
