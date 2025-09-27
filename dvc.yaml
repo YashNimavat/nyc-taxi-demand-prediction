@@ -1,14 +1,9 @@
 stages:
   download_data:
-    cmd: python src/data/download_data.py
+    cmd: python src/data/download_data.py --config config/data_config.yaml
     deps:
       - src/data/download_data.py
       - config/data_config.yaml
-    outs:
-      - data/raw/yellow_tripdata_2025-01.parquet
-      - data/raw/yellow_tripdata_2025-02.parquet  
-      - data/raw/yellow_tripdata_2025-03.parquet
-      - data/raw/taxi_zone_lookup.csv
 
   preprocess_data:
     cmd: python src/data/preprocess.py --config config/data_config.yaml
@@ -42,11 +37,25 @@ stages:
       - src/models/train_model.py
       - config/model_config.yaml
       - data/processed/aggregated_h3_features.parquet
-      - data/processed/weather_data.parquet
+      - src/utils/h3_utils.py
+    params:
+      - config/model_config.yaml:
+          - model.parameters.max_depth
+          - model.parameters.learning_rate
+          - model.parameters.n_estimators
     outs:
       - models/xgboost_model.pkl
-      - models/model_metadata.json
     metrics:
       - metrics/model_performance.json
     plots:
       - plots/feature_importance.json
+
+  evaluate_model:
+    cmd: python src/models/evaluate_model.py --config config/model_config.yaml
+    deps:
+      - src/models/evaluate_model.py
+      - config/model_config.yaml
+      - models/xgboost_model.pkl
+      - data/processed/aggregated_h3_features.parquet
+    metrics:
+      - metrics/eval_metrics.json

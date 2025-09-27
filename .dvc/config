@@ -1,4 +1,9 @@
 [core]
     remote = origin
+[cache]
+    dir = cache
 ['remote "origin"']
     url = https://dagshub.com/YashNimavat/nyc-taxi-demand-prediction.dvc
+    auth = basic
+    user = YashNimavat
+    password = acadbe16e8237442c6492fa85232853c0acf3d4e

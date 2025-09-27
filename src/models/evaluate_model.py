@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 """
-Model Evaluation Script
-Evaluates trained model performance with detailed analysis
+FIXED Model Evaluation Script - Loads consolidated features
+Solves the feature mismatch problem by using the consolidated feature file
 """
 
 import pandas as pd
@@ -20,16 +21,17 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
 logger = logging.getLogger(__name__)
 
 class ModelEvaluator:
-    """Evaluates taxi demand prediction model"""
+    """Evaluates taxi demand prediction model - FIXED for consolidated features"""
     
     def __init__(self, config_path: str = "config/model_config.yaml"):
         """Initialize evaluator with configuration"""
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-    
+
     def load_model(self) -> object:
         """Load trained model"""
         model_path = Path("models/xgboost_model.pkl")
@@ -37,35 +39,60 @@ class ModelEvaluator:
             model = pickle.load(f)
         logger.info("✅ Loaded trained model")
         return model
-    
+
     def load_test_data(self) -> tuple:
-        """Load test data for evaluation"""
-        # Load processed data
+        """Load test data for evaluation - FIXED to use consolidated features"""
+        logger.info("📥 Loading consolidated feature data...")
+        
+        # Load consolidated features (includes weather data already merged)
         features_path = Path("data/processed/aggregated_h3_features.parquet")
-        features_df = pd.read_parquet(features_path)
+        merged_df = pd.read_parquet(features_path)
         
-        weather_path = Path("data/processed/weather_data.parquet")
-        weather_df = pd.read_parquet(weather_path)
+        logger.info(f"✅ Loaded {len(merged_df):,} consolidated feature records")
         
-        # Merge datasets
-        merged_df = features_df.merge(weather_df, on='time_window', how='left')
-        
-        # Fill missing values
-        weather_columns = ['temperature_f', 'precipitation', 'wind_speed', 'humidity', 
-                          'is_raining', 'is_cold', 'is_hot']
-        for col in weather_columns:
-            if col in merged_df.columns:
-                merged_df[col] = merged_df[col].fillna(merged_df[col].mean() if col not in ['is_raining', 'is_cold', 'is_hot'] else 0)
-        
-        # Get features
+        # Get exact feature columns that training used
         feature_columns = self.config['model']['features']
+        
+        # Ensure all required features exist with defaults if missing
+        required_defaults = {
+            'temperature_f': 60.0,
+            'is_raining': 0,
+            'is_cold': 0,
+            'is_rush_hour': 0,
+            'weekday': 0,
+            'ema3': 0,
+            'trip_prev': 0,
+            'demand_trend': 0
+        }
+        
+        for feature, default_val in required_defaults.items():
+            if feature not in merged_df.columns:
+                logger.warning(f"Adding missing feature {feature} with default value {default_val}")
+                merged_df[feature] = default_val
+        
+        # Create weekday as alias for day_of_week if needed
+        if 'weekday' not in merged_df.columns and 'day_of_week' in merged_df.columns:
+            merged_df['weekday'] = merged_df['day_of_week']
+        
+        # Create is_rush_hour if missing
+        if 'is_rush_hour' not in merged_df.columns and 'hour' in merged_df.columns:
+            merged_df['is_rush_hour'] = (merged_df['hour'].isin([7, 8, 9, 17, 18, 19])).astype(int)
+        
+        # Filter to only available features
         available_features = [col for col in feature_columns if col in merged_df.columns]
+        
+        if len(available_features) != len(feature_columns):
+            missing_features = set(feature_columns) - set(available_features)
+            logger.warning(f"Missing features: {missing_features}")
         
         X = merged_df[available_features]
         y = merged_df['trip_count']
         
+        logger.info(f"✅ Prepared evaluation data with {len(available_features)} features")
+        logger.info(f"📊 Feature columns: {available_features}")
+        
         return X, y, merged_df
-    
+
     def detailed_evaluation(self, model, X, y, df) -> dict:
         """Perform detailed model evaluation"""
         logger.info("📊 Performing detailed evaluation...")
@@ -86,22 +113,22 @@ class ModelEvaluator:
         df['residual'] = y - y_pred
         df['abs_error'] = np.abs(df['residual'])
         df['pct_error'] = (df['residual'] / np.maximum(df['actual'], 1)) * 100
-        
+
         # Temporal analysis
         temporal_metrics = df.groupby('hour').agg({
             'abs_error': 'mean',
             'pct_error': 'mean'
         }).to_dict()
-        
+
         # Spatial analysis
         spatial_metrics = df.groupby('pickup_h3').agg({
-            'abs_error': 'mean',
+            'abs_error': 'mean', 
             'pct_error': 'mean'
         }).describe().to_dict()
-        
+
         # Error distribution analysis
         error_percentiles = np.percentile(df['abs_error'], [25, 50, 75, 90, 95, 99])
-        
+
         evaluation_results = {
             'overall_metrics': {
                 'mae': float(mae),
@@ -131,10 +158,10 @@ class ModelEvaluator:
                 'max_actual': float(df['actual'].max())
             }
         }
-        
+
         logger.info(f"✅ Detailed evaluation completed - Overall MAE: {mae:.3f}")
         return evaluation_results, df
-    
+
     def create_evaluation_plots(self, df: pd.DataFrame, model) -> dict:
         """Create evaluation plots"""
         logger.info("📈 Creating evaluation plots...")
@@ -144,10 +171,9 @@ class ModelEvaluator:
         
         # Set style
         plt.style.use('seaborn-v0_8')
-        
         plot_data = {}
         
-        # 1. Actual vs Predicted scatter plot
+        # 1. Actual vs Predicted scatter plot  
         plt.figure(figsize=(10, 8))
         plt.scatter(df['actual'], df['predicted'], alpha=0.5, s=20)
         
@@ -176,9 +202,10 @@ class ModelEvaluator:
         plt.subplot(1, 2, 2)
         plt.hist(df['residual'], bins=50, alpha=0.7, edgecolor='black')
         plt.xlabel('Residual')
-        plt.ylabel('Frequency')
+        plt.ylabel('Frequency')  
         plt.title('Residual Distribution')
         plt.grid(True, alpha=0.3)
+        
         plt.tight_layout()
         plt.savefig(plots_dir / 'residuals_analysis.png', dpi=300, bbox_inches='tight')
         plt.close()
@@ -200,16 +227,15 @@ class ModelEvaluator:
             'residuals': df['residual'].tolist()[:1000],  # Limit for JSON size
             'predictions': df['predicted'].tolist()[:1000]
         }
-        
         plot_data['hourly_error'] = hourly_error.to_dict()
         
         # Save to plots directory for DVC tracking
         with open(plots_dir / 'prediction_analysis.json', 'w') as f:
             json.dump(plot_data, f, indent=2)
-        
+            
         logger.info("✅ Evaluation plots created")
         return plot_data
-    
+
     def run(self) -> dict:
         """Run the evaluation pipeline"""
         logger.info("🚀 Starting model evaluation...")
@@ -228,10 +254,10 @@ class ModelEvaluator:
         metrics_dir = Path("metrics")
         metrics_dir.mkdir(exist_ok=True)
         
-        eval_path = metrics_dir / "model_evaluation.json"
+        eval_path = metrics_dir / "eval_metrics.json"
         with open(eval_path, 'w') as f:
             json.dump(evaluation_results, f, indent=2)
-        
+            
         logger.info(f"✅ Model evaluation completed!")
         logger.info(f"📊 MAE: {evaluation_results['overall_metrics']['mae']:.3f}")
         logger.info(f"📊 RMSE: {evaluation_results['overall_metrics']['rmse']:.3f}")
@@ -251,7 +277,6 @@ def main():
     try:
         evaluator = ModelEvaluator(args.config)
         results = evaluator.run()
-        
         logger.info("🎉 Model evaluation completed successfully!")
         
     except Exception as e:

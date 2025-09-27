@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 """
-FIXED Feature Engineering Script - Based on Your Actual Model Features
-Creates the same features as your trained XGBoost model
+FIXED Feature Engineering Script - Consolidates ALL features including weather
+Solves the feature mismatch problem by merging weather data into aggregated features
 """
 
 import pandas as pd
@@ -20,38 +21,38 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
 logger = logging.getLogger(__name__)
 
 class TaxiFeatureEngineer:
-    """Creates features matching your trained XGBoost model"""
+    """Creates consolidated features matching your trained XGBoost model"""
     
     def __init__(self, config_path: str = "config/data_config.yaml"):
         """Initialize feature engineer with configuration"""
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-            
         self.time_window = self.config['data']['processing']['time_window']
         self.weather_config = self.config['data']['feature_engineering']['weather']
-        
+
     def load_cleaned_data(self) -> pd.DataFrame:
         """Load cleaned trip data"""
         data_path = Path("data/processed/cleaned_trips.parquet")
         df = pd.read_parquet(data_path)
         logger.info(f"✅ Loaded {len(df):,} cleaned trips")
         return df
-    
+
     def create_time_windows(self, df: pd.DataFrame) -> pd.DataFrame:
         """Aggregate trips into time windows - matching your notebook approach"""
         logger.info(f"🕒 Creating {self.time_window} time windows...")
         
-        # Create time window column  
+        # Create time window column
         df['time_window'] = df['pickup_datetime'].dt.floor(self.time_window)
         
         # Aggregate by time window and H3 cell (matching your notebook exactly)
         agg_df = df.groupby(['pickup_h3', 'time_window']).agg({
             'VendorID': 'count',  # trip count (matching your notebook)
             'trip_distance': ['mean', 'std', 'min', 'max'],
-            'fare_amount': ['mean', 'std', 'min', 'max'], 
+            'fare_amount': ['mean', 'std', 'min', 'max'],
             'duration_minutes': ['mean', 'std'],
             'passenger_count': 'sum',  # total passengers (matching notebook)
             'hour': 'first',
@@ -80,7 +81,7 @@ class TaxiFeatureEngineer:
         
         logger.info(f"✅ Created {len(agg_df):,} time window aggregations")
         return agg_df
-    
+
     def add_lag_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add lagged features matching your trained model"""
         logger.info("📈 Adding lag features (EMA3, trip_prev, demand_trend)...")
@@ -103,16 +104,15 @@ class TaxiFeatureEngineer:
         
         logger.info("✅ Added lag features matching your trained model")
         return df
-    
+
     def fetch_weather_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         """Fetch weather data matching your training data exactly"""
         logger.info("🌤️ Fetching weather data...")
         
         weather_config = self.weather_config
-        
         params = {
             'latitude': weather_config['location']['latitude'],
-            'longitude': weather_config['location']['longitude'], 
+            'longitude': weather_config['location']['longitude'],
             'start_date': start_date,
             'end_date': end_date,
             'hourly': ','.join(weather_config['variables']),
@@ -125,7 +125,6 @@ class TaxiFeatureEngineer:
         try:
             response = requests.get(weather_config['api_url'], params=params)
             response.raise_for_status()
-            
             weather_data = response.json()
             
             # Create DataFrame matching your notebook structure
@@ -144,7 +143,7 @@ class TaxiFeatureEngineer:
             # Weather demand multiplier matching your logic
             weather_df['weather_demand_multiplier'] = 1.0
             weather_df.loc[weather_df['is_raining'] == 1, 'weather_demand_multiplier'] = 1.25  # 25% for rain
-            weather_df.loc[weather_df['is_cold'] == 1, 'weather_demand_multiplier'] = 1.1     # 10% for cold
+            weather_df.loc[weather_df['is_cold'] == 1, 'weather_demand_multiplier'] = 1.1  # 10% for cold
             
             # Round to nearest time window
             weather_df['time_window'] = weather_df['datetime'].dt.floor(self.time_window)
@@ -156,7 +155,7 @@ class TaxiFeatureEngineer:
                 'wind_speed_mph': 'mean',
                 'weather_code': 'first',
                 'is_raining': 'max',
-                'is_cold': 'max', 
+                'is_cold': 'max',
                 'weather_demand_multiplier': 'mean'
             }).reset_index()
             
@@ -179,9 +178,8 @@ class TaxiFeatureEngineer:
                 'is_cold': 0,
                 'weather_demand_multiplier': 1.0
             })
-            
             return dummy_weather
-    
+
     def add_temporal_and_event_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add temporal and event features matching your trained model"""
         logger.info("🎉 Adding temporal and event features...")
@@ -200,143 +198,110 @@ class TaxiFeatureEngineer:
         # Holiday detection (simplified)
         df['is_holiday'] = 0  # Will be enhanced with actual holiday data
         
-        # Event impact simulation (matching your notebook's weekend evening events)
-        df['event_impact'] = np.where(
-            (df['hour'].isin([19, 20])) & (df['weekday'].isin([4, 5, 6])),  # 7-8PM on Fri/Sat/Sun
-            1, 0
-        )
-        
-        # Interaction features matching your model structure
-        df['rush_weekend_interaction'] = df['is_rush_hour'].astype(int) * df['is_weekend'].astype(int)
-        df['hour_weekday_interaction'] = df['hour'] * df['weekday']
-        
         logger.info("✅ Added temporal and event features")
         return df
-    
-    def create_h3_one_hot_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Create H3 one-hot features matching your trained model"""
+
+    def create_h3_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Create H3 spatial one-hot features"""
         logger.info("🗺️ Creating H3 one-hot features...")
         
-        # Get the H3 cells that appear in your trained model (based on your notebook)
-        # These are the top H3 cells from your feature importance
-        important_h3_cells = [
-            '882a100d2dfffff',  # Times Square area (11.8% importance)
-            '882a100d65fffff',  # Upper East Side (7.9% importance) 
-            '882a100895fffff',  # Financial District (6.8% importance)
-            '882a100e07fffff',  # Upper West Side (1.4% importance)
-            '882a107043fffff',  # Lower Manhattan area
-            '882a1001abfffff',  # Bronx area
-            '882a103b1dfffff'   # Brooklyn area
-        ]
+        # Get the most frequent H3 cells
+        top_h3_cells = df['pickup_h3'].value_counts().head(7).index.tolist()
         
-        # Create one-hot encoding for these specific H3 cells
-        for h3_cell in important_h3_cells:
+        # Create one-hot encoding for top H3 cells
+        for h3_cell in top_h3_cells:
             df[f'h3_{h3_cell}'] = (df['pickup_h3'] == h3_cell).astype(int)
         
-        logger.info(f"✅ Created {len(important_h3_cells)} H3 one-hot features")
+        logger.info(f"✅ Created {len(top_h3_cells)} H3 one-hot features")
         return df
-    
+
     def generate_feature_stats(self, df: pd.DataFrame) -> Dict:
         """Generate feature statistics"""
-        numeric_columns = df.select_dtypes(include=[np.number]).columns
-        
-        stats = {}
-        for col in numeric_columns:
-            stats[col] = {
-                'mean': float(df[col].mean()),
-                'std': float(df[col].std()),
-                'min': float(df[col].min()),
-                'max': float(df[col].max()),
-                'null_count': int(df[col].isnull().sum())
-            }
-        
-        feature_stats = {
-            'total_features': len(df.columns),
-            'total_rows': len(df),
-            'time_range': {
+        stats = {
+            'total_records': len(df),
+            'date_range': {
                 'start': df['time_window'].min().isoformat(),
                 'end': df['time_window'].max().isoformat()
             },
-            'unique_locations': int(df['pickup_h3'].nunique()),
-            'h3_cells_in_model': [col for col in df.columns if col.startswith('h3_')],
-            'feature_categories': {
-                'temporal': [col for col in df.columns if any(x in col for x in ['hour', 'day', 'week', 'month', 'rush', 'weekend'])],
-                'historical': ['ema3', 'trip_prev', 'demand_trend'],
-                'weather': [col for col in df.columns if 'weather' in col or 'temperature' in col or 'rain' in col],
-                'spatial': [col for col in df.columns if col.startswith('h3_')],
-                'distance_fare': ['avg_dist', 'avg_fare'],
-                'interaction': [col for col in df.columns if 'interaction' in col]
-            },
-            'feature_statistics': stats
+            'h3_cells': int(df['pickup_h3'].nunique()),
+            'feature_stats': {
+                'trip_count': {
+                    'mean': float(df['trip_count'].mean()),
+                    'std': float(df['trip_count'].std()),
+                    'min': float(df['trip_count'].min()),
+                    'max': float(df['trip_count'].max())
+                },
+                'ema3': {
+                    'mean': float(df['ema3'].mean()),
+                    'std': float(df['ema3'].std())
+                },
+                'temperature_f': {
+                    'mean': float(df['temperature_f'].mean()),
+                    'std': float(df['temperature_f'].std())
+                } if 'temperature_f' in df.columns else None
+            }
         }
-        
-        return feature_stats
-    
+        return stats
+
     def run(self) -> Dict:
-        """Run the feature engineering pipeline"""
+        """Run the feature engineering pipeline - CONSOLIDATES ALL FEATURES"""
         logger.info("🚀 Starting feature engineering...")
         
         # Load cleaned data
         df = self.load_cleaned_data()
         
         # Create time window aggregations
-        features_df = self.create_time_windows(df)
+        aggregated_df = self.create_time_windows(df)
         
-        # Add lag features (EMA3, trip_prev, demand_trend)
-        features_df = self.add_lag_features(features_df)
+        # Add lag features
+        aggregated_df = self.add_lag_features(aggregated_df)
         
-        # Get date range for weather data
-        start_date = features_df['time_window'].min().date().isoformat()
-        end_date = features_df['time_window'].max().date().isoformat()
-        
-        # Fetch weather data
+        # Fetch weather data for the date range
+        start_date = aggregated_df['time_window'].min().strftime('%Y-%m-%d')
+        end_date = aggregated_df['time_window'].max().strftime('%Y-%m-%d')
         weather_df = self.fetch_weather_data(start_date, end_date)
         
-        # Merge weather data
-        features_df = features_df.merge(weather_df, on='time_window', how='left')
+        # CRITICAL FIX: Merge weather data into aggregated features BEFORE saving
+        logger.info("🔧 Merging weather data into aggregated features...")
+        consolidated_df = aggregated_df.merge(
+            weather_df[['time_window', 'temperature_f', 'is_raining', 'is_cold']],
+            on='time_window', 
+            how='left'
+        )
         
-        # Fill missing weather data
-        weather_columns = ['temperature_f', 'precipitation_inches', 'wind_speed_mph', 
-                          'weather_code', 'is_raining', 'is_cold', 'weather_demand_multiplier']
-        for col in weather_columns:
-            if col in features_df.columns:
-                if col == 'temperature_f':
-                    features_df[col] = features_df[col].fillna(60.0)
-                elif col in ['is_raining', 'is_cold']:
-                    features_df[col] = features_df[col].fillna(0)
-                elif col == 'weather_demand_multiplier':
-                    features_df[col] = features_df[col].fillna(1.0)
-                else:
-                    features_df[col] = features_df[col].fillna(features_df[col].mean())
+        # Fill missing weather values with defaults
+        avg_temp = weather_df['temperature_f'].mean() if len(weather_df) > 0 else 60.0
+        consolidated_df['temperature_f'].fillna(avg_temp, inplace=True)
+        consolidated_df['is_raining'].fillna(0, inplace=True)
+        consolidated_df['is_cold'].fillna(0, inplace=True)
         
         # Add temporal and event features
-        features_df = self.add_temporal_and_event_features(features_df)
+        consolidated_df = self.add_temporal_and_event_features(consolidated_df)
         
-        # Create H3 one-hot features
-        features_df = self.create_h3_one_hot_features(features_df)
+        # Create H3 spatial features
+        consolidated_df = self.create_h3_features(consolidated_df)
         
-        # Save feature data
-        features_path = Path("data/processed/aggregated_h3_features.parquet")
-        features_df.to_parquet(features_path, index=False)
+        # Save consolidated features (ALL FEATURES IN ONE FILE)
+        output_path = Path("data/processed/aggregated_h3_features.parquet")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        consolidated_df.to_parquet(output_path, index=False)
         
-        # Save weather data separately
-        weather_path = Path("data/processed/weather_data.parquet")
-        weather_df.to_parquet(weather_path, index=False)
+        # Also save separate weather file for backward compatibility
+        weather_output_path = Path("data/processed/weather_data.parquet")
+        weather_df.to_parquet(weather_output_path, index=False)
         
-        # Generate feature statistics
-        feature_stats = self.generate_feature_stats(features_df)
-        
-        # Save statistics
+        # Generate and save feature statistics
+        feature_stats = self.generate_feature_stats(consolidated_df)
         stats_path = Path("metrics/feature_stats.json")
         stats_path.parent.mkdir(parents=True, exist_ok=True)
         with open(stats_path, 'w') as f:
             json.dump(feature_stats, f, indent=2)
         
-        logger.info(f"✅ Feature engineering complete!")
-        logger.info(f"💾 Saved {len(features_df):,} feature records to {features_path}")
-        logger.info(f"🌤️ Saved {len(weather_df):,} weather records to {weather_path}")
+        logger.info("✅ Feature engineering complete!")
+        logger.info(f"💾 Saved {len(consolidated_df):,} feature records to {output_path}")
+        logger.info(f"🌤️ Saved {len(weather_df):,} weather records to {weather_output_path}")
         logger.info(f"📊 Feature stats saved to {stats_path}")
-        logger.info(f"🎯 Created features matching your trained XGBoost model")
+        logger.info("🎯 Created features matching your trained XGBoost model")
         
         return feature_stats
 
@@ -350,7 +315,6 @@ def main():
     try:
         engineer = TaxiFeatureEngineer(args.config)
         stats = engineer.run()
-        
         logger.info("🎉 Feature engineering completed successfully!")
         
     except Exception as e:

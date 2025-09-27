@@ -39,20 +39,15 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Data files (tracked by DVC)
-data/raw/*.parquet
-data/raw/*.csv
-data/processed/*.parquet
-models/*.pkl
+# DVC tracked files (large data/models)
+/data/processed/
+/models/
 
 # Logs
-logs/*.log
 *.log
-
-# MLflow
 mlruns/
 
-# DVC
+# DVC cache
 .dvc/cache
 
 # Environment variables

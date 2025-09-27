@@ -1,7 +1,7 @@
 schema: '2.0'
 stages:
   download_data:
-    cmd: python src/data/download_data.py
+    cmd: python src/data/download_data.py --config config/data_config.yaml
     deps:
     - path: config/data_config.yaml
       hash: md5
@@ -11,23 +11,6 @@ stages:
       hash: md5
       md5: fb50c65846496fe4a6fb6cb4a1cd8068
       size: 7160
-    outs:
-    - path: data/raw/taxi_zone_lookup.csv
-      hash: md5
-      md5: c6064b7c144c716450641f769659d178
-      size: 12331
-    - path: data/raw/yellow_tripdata_2025-01.parquet
-      hash: md5
-      md5: c403f3bc3a64a1405e1a39817bc7e414
-      size: 59158238
-    - path: data/raw/yellow_tripdata_2025-02.parquet
-      hash: md5
-      md5: 0f61bd9b136ad698c6d9094db2fa75e0
-      size: 60343086
-    - path: data/raw/yellow_tripdata_2025-03.parquet
-      hash: md5
-      md5: 70f84a035ad186f8d9d50c26015b0d48
-      size: 69964745
   preprocess_data:
     cmd: python src/data/preprocess.py --config config/data_config.yaml
     deps:
@@ -77,54 +60,79 @@ stages:
       size: 283323499
     - path: src/data/feature_engineering.py
       hash: md5
-      md5: 195b71757ee06f8f94660ba4a5cd7702
-      size: 15976
+      md5: 5351389ba1c1ba04f9f23b42a31f6efe
+      size: 14269
     outs:
     - path: data/processed/aggregated_h3_features.parquet
       hash: md5
-      md5: 6949b9f0cc8d561678710f9b362f453c
-      size: 5195249
+      md5: 001a9d45a60cbe206e18eb4c2b53d24b
+      size: 5118225
     - path: data/processed/weather_data.parquet
       hash: md5
       md5: ac923a64dafbe9a827edb426dd3b9ac5
       size: 1880034
     - path: metrics/feature_stats.json
       hash: md5
-      md5: a18aa8040257ea1d217dea762f7574bf
-      size: 9161
+      md5: f11adf7299fda1454e9c6e891aa14fde
+      size: 498
   train_model:
     cmd: python src/models/train_model.py --config config/model_config.yaml
     deps:
     - path: config/model_config.yaml
       hash: md5
-      md5: 9661673697d93b3120fe07529b428c2f
-      size: 1272
+      md5: 7f22aa375125c3a6c48fd85768246193
+      size: 1094
     - path: data/processed/aggregated_h3_features.parquet
       hash: md5
-      md5: 6949b9f0cc8d561678710f9b362f453c
-      size: 5195249
-    - path: data/processed/weather_data.parquet
-      hash: md5
-      md5: ac923a64dafbe9a827edb426dd3b9ac5
-      size: 1880034
+      md5: 001a9d45a60cbe206e18eb4c2b53d24b
+      size: 5118225
     - path: src/models/train_model.py
       hash: md5
-      md5: 4040973679c4131a8f8a2df7eced7b98
-      size: 10043
+      md5: a42d84b14534045ae0e1c30bad3cccc8
+      size: 9760
+    - path: src/utils/h3_utils.py
+      hash: md5
+      md5: d65a0941e56955e30276ec402ccbd173
+      size: 4685
+    params:
+      config/model_config.yaml:
+        model.parameters.learning_rate: 0.1
+        model.parameters.max_depth: 6
+        model.parameters.n_estimators: 100
     outs:
     - path: metrics/model_performance.json
       hash: md5
-      md5: 3320cbd5a765ff1e608a34784f81cf4d
-      size: 288
-    - path: models/model_metadata.json
-      hash: md5
-      md5: b4d67d2f8019117057e6e10c05777457
-      size: 856
+      md5: 64825664af4b376289ffdf7b28eeaf70
+      size: 290
     - path: models/xgboost_model.pkl
       hash: md5
-      md5: b9d29180cc3bcd0881ec43d32575dae5
-      size: 444858
+      md5: 6f2326aa2114a22af10975b2e6f8c391
+      size: 439420
     - path: plots/feature_importance.json
       hash: md5
-      md5: cb93b5bcf5da0bf89e52c228990da40e
-      size: 411
+      md5: 8a706cbb873ae7eb41d5dd5da24daff4
+      size: 466
+  evaluate_model:
+    cmd: python src/models/evaluate_model.py --config config/model_config.yaml
+    deps:
+    - path: config/model_config.yaml
+      hash: md5
+      md5: 7f22aa375125c3a6c48fd85768246193
+      size: 1094
+    - path: data/processed/aggregated_h3_features.parquet
+      hash: md5
+      md5: 001a9d45a60cbe206e18eb4c2b53d24b
+      size: 5118225
+    - path: models/xgboost_model.pkl
+      hash: md5
+      md5: 6f2326aa2114a22af10975b2e6f8c391
+      size: 439420
+    - path: src/models/evaluate_model.py
+      hash: md5
+      md5: db029fcc01ca6b6e93a2b85d2b43fa48
+      size: 10908
+    outs:
+    - path: metrics/eval_metrics.json
+      hash: md5
+      md5: c9b32d993a172416d846cdd64135457f
+      size: 2992
