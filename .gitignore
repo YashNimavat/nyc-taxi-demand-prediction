@@ -56,3 +56,6 @@ mlruns/
 # Temporary files
 *.tmp
 *.temp"data/raw/" 
+
+# RAW DATA - DO NOT TRACK
+data/raw/
