@@ -55,4 +55,4 @@ mlruns/
 
 # Temporary files
 *.tmp
-*.temp
+*.temp"data/raw/" 
